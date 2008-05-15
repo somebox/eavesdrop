@@ -2,7 +2,7 @@
    $:.include?(File.dirname(__FILE__)) || $:.include?(File.expand_path(File.dirname(__FILE__)))
 =begin
 
-Eavesdrop was designed to capture network traffic (by messing with TCPSocket) and allow the conversation to be recorded, to a file for instance. It also allows these conversations to be replayed. The goal is to allow for a suite of tests that work against "real" network resources, but a repeatable and easier to maintain.
+Eavesdrop was designed to capture network traffic (by messing with TCPSocket) and allow the conversation to be recorded, to a file for instance. It also allows these conversations to be replayed. The goal is to allow for a suite of tests that work against "real" network resources, but are repeatable and easier to maintain.
 
 Example:
 
@@ -12,7 +12,7 @@ Using it in tests
 
   def test_something_network_related
     eavesdrop('network_test_1') do 
-      Feed.update_news_from('http://mysite.com')
+      Feed.update_news_from('http://news.google.com')
       assert_equal 'NSA Admits Wrongdoing', Feed.top_story.title
     end
   end
@@ -39,26 +39,38 @@ Results saved as YAML
 require 'eavesdrop/instance_exec'
 require 'socket'
 
-class TCPSocket  
-  class << self
-    alias_method :untapped_open, :open
-
-    def open(*args)
-      puts "*** open(#{args.inspect})"
-      socket = old_open(*args)
-      Eavesdrop::Monitor.attach(socket, :read, :sysread)
-      socket
-    end
-  end
-end
+# class TCPSocket  
+#   class << self
+#     alias_method :untapped_open, :open
+# 
+#     def open(*args)
+#       puts "*** open(#{args.inspect})"
+#       socket = old_open(*args)
+#       Eavesdrop::Monitor.attach(socket, :read, :sysread)
+#       socket
+#     end
+#   end
+# end
 
 module Eavesdrop
-  def self.included
+  def self.included(*args)
+    puts "I was just included with args #{args.inspect}"
     # ...
   end
   
   def eavesdrop
     
+  end
+  
+  class Proxy
+    def initialize(instance)
+      @real_object = instance
+    end
+    
+    def method_missing(method, *args)
+      puts "called #{method}"
+      result = @real_object.send(method, *args)
+    end
   end
   
   class Monitor
@@ -83,7 +95,7 @@ module Eavesdrop
           tapped_method = "tapped_#{method}"
           if !self.class.method_defined?(tapped_method)          
             define_method(tapped_method) do |*args|
-              puts "#{method} called"
+              #puts "#{method} called"
               result = self.send("untapped_#{method}".to_sym, *args)
               Eavesdrop::Monitor.record(result)
               result
@@ -106,6 +118,19 @@ module Eavesdrop
       end
     end  
     
+    def self.inject_proxy(klass, method)
+      untapped_method = "untapped_#{method}"
+      tapped_method = "tapped_#{method}"          
+      klass.class_eval do
+        (class << self; self; end).send(:alias_method, untapped_method, method)
+        (class << self; self; end).send(:define_method, tapped_method) do |*args|
+          puts "#{method} called"
+          instance = self.send("untapped_#{method}".to_sym, *args)
+          Eavesdrop::Proxy.new(instance)
+        end                
+        (class << self; self; end).send(:alias_method, method, tapped_method)        
+      end
+    end
   end
   
 end

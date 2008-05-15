@@ -34,6 +34,15 @@ class TestEavesdrop < Test::Unit::TestCase
     Eavesdrop::Monitor.reset!
   end
   
+  def test_factory_method_with_proxy
+    Eavesdrop::Monitor.inject_proxy(Dummy, :open)
+    assert_equal Eavesdrop::Proxy, Dummy.open.class
+  end
+  
+  def test_factory_method_proxy_can_call_underlying_methods
+    
+  end
+  
   def test_monitored_methods_are_aliased
     d = Dummy.new
     Eavesdrop::Monitor.attach(d, :hello)
