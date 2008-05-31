@@ -1,32 +1,11 @@
 require File.dirname(__FILE__) + '/test_helper.rb'
+require File.dirname(__FILE__) + '/dummy_classes.rb'
+
+require 'socket'
+require 'net/http'
+require 'net/protocol'
 
 class TestEavesdrop < Test::Unit::TestCase
-
-  # classes for testing
-  
-  class Dummy
-    def hello
-      return "hi"
-    end
-
-    def self.open
-      return Dummy.new
-    end
-  end
-  
-  class DummyWithParameters
-    attr_accessor :param, :last_param
-    
-    def one_param(param)
-      @param = param
-      return "got #{param}"
-    end
-    
-    def handle(*args)
-      @last_param = args[-1]
-      return "got #{args.join(',')}"
-    end
-  end
   
   # <><><><>
 
@@ -34,13 +13,65 @@ class TestEavesdrop < Test::Unit::TestCase
     Eavesdrop::Monitor.reset!
   end
   
+  def test_tcp_eavesdrop
+    Net::BufferedIO.eavesdrop do
+      Net::HTTP.start('localhost',3000) {|http|    
+        path = '/'
+        req = Net::HTTP::Get.new(path,nil)
+        response = http.request(req)
+        # puts response.body[0..500]  
+      }   
+      puts Eavesdrop.transcript.inspect
+    end
+  end
+  
+  def test_transcript
+    Eavesdrop.transcript = {
+      :Dummy => [
+        [:hello2, Marshal.dump('hi')]
+      ]
+    }
+    Eavesdrop.playback_mode[:Dummy] = true
+    Dummy.eavesdrop do
+      assert_equal 'hi', Dummy.new.hello2
+    end
+  end
+  
+  def test_object_level_eavesdrop_can_capture
+    DummyNew.eavesdrop do
+      Dummy.new.hello
+      assert_equal ['hi'], Eavesdrop::Monitor.buffer
+    end
+  end
+  
+  def test_object_level_eavesdrop_with_block
+    MyObject.eavesdrop do
+      m = MyObject.new
+      assert_equal Eavesdrop::Proxy, m.class
+    end
+  end
+  
+  def test_factory_method_on_new
+    Eavesdrop::Monitor.install(DummyNew, :new)
+    obj = DummyNew.new
+    assert_equal Eavesdrop::Proxy, obj.class
+    assert_equal "yes", obj.a
+  end
+  
   def test_factory_method_with_proxy
-    Eavesdrop::Monitor.inject_proxy(Dummy, :open)
+    Eavesdrop::Monitor.install(Dummy, :open)
     assert_equal Eavesdrop::Proxy, Dummy.open.class
   end
   
-  def test_factory_method_proxy_can_call_underlying_methods
-    
+  def test_factory_method_with_stealth_mode
+    Eavesdrop.stealth_mode = true
+    Eavesdrop::Monitor.install(Dummy, :open)
+    assert_equal Dummy, Dummy.open.class    
+  end
+  
+  def test_proxy_can_call_underlying_methods
+    Eavesdrop::Monitor.install(Dummy, :open)
+    assert_equal 'hi', Dummy.open.hello
   end
   
   def test_monitored_methods_are_aliased

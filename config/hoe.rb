@@ -1,8 +1,8 @@
 require 'eavesdrop/version'
 
-AUTHOR = 'FIXME full name'  # can also be an array of Authors
-EMAIL = "FIXME email"
-DESCRIPTION = "description of gem"
+AUTHOR = 'Jeremy Seitz'  # can also be an array of Authors
+EMAIL = "jeremy@somebox.com"
+DESCRIPTION = "An experimental way to eavesdrop on methods or entire objects, allowing recording and play back of resuts from a series of calls to method(s). Potentially useful in testing (recording TCPSocket, for instance) or other things (like user input)."
 GEM_NAME = 'eavesdrop' # what ppl will type to install your gem
 RUBYFORGE_PROJECT = 'eavesdrop' # The unix name for your project
 HOMEPATH = "http://#{RUBYFORGE_PROJECT}.rubyforge.org"
@@ -13,7 +13,7 @@ EXTRA_DEPENDENCIES = [
 
 @config_file = "~/.rubyforge/user-config.yml"
 @config = nil
-RUBYFORGE_USERNAME = "unknown"
+RUBYFORGE_USERNAME = "somebox"
 def rubyforge_username
   unless @config
     begin
