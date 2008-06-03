@@ -4,6 +4,7 @@ require File.dirname(__FILE__) + '/dummy_classes.rb'
 require 'socket'
 require 'net/http'
 require 'net/protocol'
+require 'yaml'
 
 class TestEavesdrop < Test::Unit::TestCase
   
@@ -13,25 +14,42 @@ class TestEavesdrop < Test::Unit::TestCase
     Eavesdrop::Monitor.reset!
   end
   
-  def test_tcp_eavesdrop
+  def test_tcp_eavesdrop_capture
+    # NOTE: LIVE NETWORK TEST!!!
+    Net::BufferedIO.eavesdrop do
+      Net::HTTP.start('news.google.com',80) {|http|    
+        path = '/'
+        req = Net::HTTP::Get.new(path,nil)
+        response = http.request(req)
+        # puts response.body[0..500]  
+      }
+      File.open("fixtures/http_read.yml", 'w+') do |f|
+        f << YAML.dump(Eavesdrop.transcript)
+      end
+      # puts Eavesdrop.transcript.inspect
+    end
+  end
+  
+  def test_tcp_eavesdrop_replay
+    Eavesdrop.playback_mode['Net::BufferedIO'] = true    
+    Eavesdrop.transcript = YAML.load_file('fixtures/http_read.yml')
     Net::BufferedIO.eavesdrop do
       Net::HTTP.start('localhost',3000) {|http|    
         path = '/'
         req = Net::HTTP::Get.new(path,nil)
         response = http.request(req)
-        # puts response.body[0..500]  
-      }   
-      puts Eavesdrop.transcript.inspect
+        puts response.body[0..500]  
+      }
     end
   end
   
   def test_transcript
     Eavesdrop.transcript = {
-      :Dummy => [
-        [:hello2, Marshal.dump('hi')]
+      'Dummy' => [
+        ['hello2', Marshal.dump('hi')]
       ]
     }
-    Eavesdrop.playback_mode[:Dummy] = true
+    Eavesdrop.playback_mode['Dummy'] = true
     Dummy.eavesdrop do
       assert_equal 'hi', Dummy.new.hello2
     end

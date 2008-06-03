@@ -34,21 +34,21 @@ module Eavesdrop
     attr_accessor :stealth_mode, :transcript, :playback_mode
   end
 
+  @playback_mode = {}
+  @transcript = {}
+  
   # little spy that pretends to be something else
   class Proxy
     def initialize(instance)
       @__real_object = instance     
-      @__klass = @__real_object.class.name.to_sym
-      # XXX: below feels nasty, where to init module vars?
-      Eavesdrop.transcript ||= {}
+      @__klass = @__real_object.class.name
       Eavesdrop.transcript[@__klass] ||= []
-      Eavesdrop.playback_mode ||= {}
     end
     
     def method_missing(method, *args)
       arg_string = args.collect{|a|a.inspect}.join(',')
-      puts "#{@__real_object.to_s}##{method}(#{arg_string})"
-      puts "#{args.inspect}"
+      puts "#{@__real_object.class.name}##{method}(#{arg_string})"
+      #puts "#{args.inspect}"
       
       # record/play : if we have monitored this class before, do a playback
       # otherwise, we record
@@ -56,12 +56,15 @@ module Eavesdrop
       if Eavesdrop.playback_mode[@__klass]
         # TODO: raise exception if method called differs from stack
         to_return = Eavesdrop.transcript[@__klass].pop[1]
-        # puts "wha? " + to_return.inspect
-        Marshal.load(to_return)
+        puts " >> " + to_return.inspect
+        # Marshal.load(to_return)
+        to_return
       else
         retval = @__real_object.send(method, *args)
-        to_store = Marshal.dump(retval)
-        Eavesdrop.transcript[@__klass].push([method, to_store])
+        # to_store = Marshal.dump(retval)
+        to_store = [method.to_s, retval]
+        puts " >> #{retval.inspect}"
+        Eavesdrop.transcript[@__klass].push(to_store)
         # puts Eavesdrop.transcript.inspect
         return retval
       end        
@@ -72,6 +75,7 @@ module Eavesdrop
     end
     
     def ===(klass)
+      # TODO
     end
     
     def is_eavesdrop_proxy?
@@ -92,6 +96,8 @@ module Eavesdrop
     def self.reset!
       self.buffer = nil
       Eavesdrop.stealth_mode = false
+      Eavesdrop.transcript = {}
+      Eavesdrop.playback_mode = {}
     end
 
     def self.attach(object, *target_methods)
