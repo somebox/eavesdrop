@@ -5,6 +5,7 @@ require 'socket'
 require 'net/http'
 require 'net/protocol'
 require 'yaml'
+require 'pp'
 
 class TestEavesdrop < Test::Unit::TestCase
   
@@ -16,30 +17,21 @@ class TestEavesdrop < Test::Unit::TestCase
   
   def test_tcp_eavesdrop_capture
     # NOTE: LIVE NETWORK TEST!!!
-    Net::BufferedIO.eavesdrop do
-      Net::HTTP.start('news.google.com',80) {|http|    
-        path = '/'
-        req = Net::HTTP::Get.new(path,nil)
-        response = http.request(req)
-        # puts response.body[0..500]  
-      }
+    TCPSocket.eavesdrop(:open, :new) do
+      Net::HTTP.get_print(URI.parse("http://www.amazon.com/gp/aw/h.html"))
+      # save it
       File.open("fixtures/http_read.yml", 'w+') do |f|
         f << YAML.dump(Eavesdrop.transcript)
       end
       # puts Eavesdrop.transcript.inspect
-    end
+   end
   end
   
   def test_tcp_eavesdrop_replay
     Eavesdrop.playback_mode['Net::BufferedIO'] = true    
     Eavesdrop.transcript = YAML.load_file('fixtures/http_read.yml')
-    Net::BufferedIO.eavesdrop do
-      Net::HTTP.start('localhost',3000) {|http|    
-        path = '/'
-        req = Net::HTTP::Get.new(path,nil)
-        response = http.request(req)
-        puts response.body[0..500]  
-      }
+    Net::BufferedIO.eavesdrop(:open, :new) do
+      Net::HTTP.get_print(URI.parse("http://www.amazon.com/gp/aw/h.html"))      
     end
   end
   

@@ -21,10 +21,15 @@ require 'socket'
 # end
 
 class Object
-  def self.eavesdrop(method=:new)
-    Eavesdrop::Monitor.install(self, method)
+  def self.eavesdrop(*methods)
+    methods = [:new] if methods.empty?
+    methods.each do |method|
+      Eavesdrop::Monitor.install(self, method)
+    end
     yield
-    Eavesdrop::Monitor.clear(self, method)
+    methods.each do |method|
+      Eavesdrop::Monitor.clear(self, method)
+    end
   end
 end
 
@@ -46,8 +51,9 @@ module Eavesdrop
     end
     
     def method_missing(method, *args)
-      arg_string = args.collect{|a|a.inspect}.join(',')
-      puts "#{@__real_object.class.name}##{method}(#{arg_string})"
+      puts "#{Eavesdrop.transcript[@__klass].size}: args=#{args.inspect}"
+#      arg_string = args.collect{|a| "#{a.inspect}"}.join(',')
+      #puts "#{@__real_object.class.name}##{method}(#{arg_string})"
       #puts "#{args.inspect}"
       
       # record/play : if we have monitored this class before, do a playback
@@ -55,18 +61,21 @@ module Eavesdrop
       
       if Eavesdrop.playback_mode[@__klass]
         # TODO: raise exception if method called differs from stack
-        to_return = Eavesdrop.transcript[@__klass].pop[1]
-        puts " >> " + to_return.inspect
-        # Marshal.load(to_return)
-        to_return
+        exchange = Eavesdrop.transcript[@__klass].shift.to_a
+        raise "#{method} expected but #{exchange[0]} was next" unless method.to_s == exchange[0]
+        raise "no more data to replay" if exchange.empty? or exchange.length != 2
+        to_return = exchange[1]
+        # puts " '#{exchange[0]}' returns: " + to_return.inspect
+        return Marshal.load(to_return)
       else
-        retval = @__real_object.send(method, *args)
-        # to_store = Marshal.dump(retval)
-        to_store = [method.to_s, retval]
-        puts " >> #{retval.inspect}"
+          # to_store = Marshal.dump(retval)
+          # puts " '#{method}' returns: "
+        @retval = @__real_object.send(method, *args)
+        puts "> " + @retval.inspect
+        ret = Marshal.dump(@retval)
+        to_store = [method.to_s, ret]
         Eavesdrop.transcript[@__klass].push(to_store)
-        # puts Eavesdrop.transcript.inspect
-        return retval
+        return @retval
       end        
     end
     
@@ -103,8 +112,8 @@ module Eavesdrop
     def self.attach(object, *target_methods)
       target_methods.map!{|m| m.to_s}
       
-      object.class.class_eval do
-        target_methods.each do |method|
+      target_methods.each do |method|
+        object.class.class_eval do        
           tapped_method = "tapped_#{method}"
           if !self.class.method_defined?(tapped_method)          
             define_method(tapped_method) do |*args|
